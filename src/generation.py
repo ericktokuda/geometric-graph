@@ -17,6 +17,7 @@ from sklearn import neighbors
 import scipy
 from scipy.spatial.distance import cdist
 import random
+import pandas as pd
 
 ##########################################################
 def plot_walk1(walk, coords, outdir):
@@ -95,41 +96,59 @@ def main(seed, outdir):
         cumsums[i, :] = np.cumsum(pr[inds[i, :]])
 
     # Walk
+    adj = np.zeros((n, n), dtype=int)
     randvals = np.random.rand(l)
-    walk = np.zeros(l + 1, dtype=int)
-    walk[0] = v0
+    walk = np.zeros(l + 1, dtype=int) # vertices after i steps in the walk
+    paired = np.zeros(l + 1, dtype=int)
+    ms = np.zeros(l + 1, dtype=int)
+    ns = np.zeros(l + 1, dtype=int)
+    walk[0] = v0; ns[0] = 1
+
     for i in range(l):
-        vcur = walk[i]
+        vcur = walk[i] # walk[i] -> walk[i+1]
         sampled = randvals[i]
         bin0 = 0
         for j in range(1, n): # First is self (NOT allowing loops in the graph)
             bin1 = cumsums[vcur, j]
             if (sampled > bin0) and (sampled <= bin1):
                 walk[i+1] = inds[vcur, j]
+
+                newarc = True if (adj[walk[i], walk[i+1]] == 0) else False
+                newvtx = True if (walk[i+1] in walk[:i+1]) else False
+                symm = True if adj[walk[i+1], walk[i]] > 0 else False
+
+                adj[walk[i], walk[i+1]] += 1
+
+                ns[i+1] = ns[i] + 1 if newvtx else ns[i]
+                ms[i+1] = ms[i] + 1 if newarc else ms[i]
+                paired[i+1] = ms[i] + 2 if (newarc and symm) else ms[i]
                 break
             bin0 = bin1
         assert j <= n
 
-    # Setup the adj list
-    adj = np.zeros((n, n), dtype=int)
-    for i in range(l):
-        adj[walk[i], walk[i+1]] += 1
+    rec = paired.astype(float) / ms
+    rec[0] = 0 # Reciprocity when there is no arcs (avoid division by zero)
+    ks = ms / ns
 
-    # Calculate the reciprocity
-    adjbin = adj > 0
-    mtotal = len(np.where(adjbin)[0])
-    mrecipr = len(np.where(np.multiply(adjbin, adjbin.T))[0])
-    recipr = mrecipr / mtotal
-
-    # Calculate the average degree
-    narcs = len(np.where(adj == 1)[0])
-    k = narcs / n
+    data = {}
+    data['walk'] = walk
+    data['vcount'] = ns
+    data['ecount'] = ms
+    data['recipr'] = rec
+    data['k'] = ks
 
     info('Walk:{}'.format(walk))
-    info('Recipr:{}'.format(recipr))
+    info('ns:{}'.format(ns))
+    info('ms:{}'.format(ms))
+    info('rec:{}'.format(rec))
+    info('<k>:{}'.format(ks))
+
+    df = pd.DataFrame(data)
+    csvpath = pjoin(outdir, 'results.csv')
+    df.to_csv(csvpath, index=False)
 
     # Plot
-    plot_walk1(walk, coords, outdir)
+    # plot_walk1(walk, coords, outdir)
     plot_walk2(walk, coords, outdir)
 
 ##########################################################
