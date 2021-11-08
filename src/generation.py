@@ -128,6 +128,7 @@ def main(seed, npoints, a, outdir):
     ks = ms / ns
 
     data = {}
+    data['alpha'] = [a] * (l+1)
     data['walk'] = walk
     data['vcount'] = ns
     data['acount'] = ms
@@ -136,11 +137,11 @@ def main(seed, npoints, a, outdir):
 
     df = pd.DataFrame(data)
     csvpath = pjoin(outdir, 'results.csv')
-    df.to_csv(csvpath, index=False)
+    df.to_csv(csvpath, index=True, index_label='step')
 
     # Plot
     # plot_walk1(walk, coords, outdir)
-    plot_walk2(walk, coords, outdir)
+    # plot_walk2(walk, coords, outdir)
 
 ##########################################################
 if __name__ == "__main__":
