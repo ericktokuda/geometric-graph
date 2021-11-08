@@ -70,33 +70,29 @@ def plot_walk2(walk, coords, outdir):
         plt.savefig(outpath); plt.close()
 
 ##########################################################
-def main(seed, outdir):
+def main(seed, npoints, a, l, outdir):
     info(inspect.stack()[0][3] + '()')
 
     random.seed(seed); np.random.seed(seed)
-    n = 50
-    coords = np.random.rand(n, 2)
-    # coords = np.array([[1,1], [4,4], [2,2]])
 
-    a = 20
+    coords = np.random.rand(npoints, 2)
     b = 1
-    v0 = np.random.randint(n) # Choice of starting vertex
-    l = 100 # Walk length
+    v0 = np.random.randint(npoints) # Choice of starting vertex
 
     aux = b * np.exp(- a * cdist(coords, coords)) # b*e^(a*d)
     probs = aux / np.sum(aux, axis=1)[:, np.newaxis]
 
     # Set up ranges for random sampling
-    inds = np.zeros((n, n), dtype=int)
-    cumsums = np.zeros((n, n), dtype=float)
+    inds = np.zeros((npoints, npoints), dtype=int)
+    cumsums = np.zeros((npoints, npoints), dtype=float)
     ranges = []
-    for i in range(n):
+    for i in range(npoints):
         pr = probs[i, :]
         inds[i, :] = np.argsort(-pr) # We check the nodes with largest probs first
         cumsums[i, :] = np.cumsum(pr[inds[i, :]])
 
     # Walk
-    adj = np.zeros((n, n), dtype=int)
+    adj = np.zeros((npoints, npoints), dtype=int)
     randvals = np.random.rand(l)
     walk = np.zeros(l + 1, dtype=int) # vertices after i steps in the walk
     paired = np.zeros(l + 1, dtype=int)
@@ -108,7 +104,7 @@ def main(seed, outdir):
         vcur = walk[i] # walk[i] -> walk[i+1]
         sampled = randvals[i]
         bin0 = 0
-        for j in range(1, n): # First is self (NOT allowing loops in the graph)
+        for j in range(1, npoints): # First is self (NOT allowing loops in the graph)
             bin1 = cumsums[vcur, j]
             if (sampled > bin0) and (sampled <= bin1):
                 walk[i+1] = inds[vcur, j]
@@ -124,7 +120,7 @@ def main(seed, outdir):
                 paired[i+1] = ms[i] + 2 if (newarc and symm) else ms[i]
                 break
             bin0 = bin1
-        assert j <= n
+        assert j <= npoints
 
     rec = paired.astype(float) / ms
     rec[0] = 0 # Reciprocity when there is no arcs (avoid division by zero)
@@ -133,15 +129,9 @@ def main(seed, outdir):
     data = {}
     data['walk'] = walk
     data['vcount'] = ns
-    data['ecount'] = ms
+    data['acount'] = ms
     data['recipr'] = rec
     data['k'] = ks
-
-    info('Walk:{}'.format(walk))
-    info('ns:{}'.format(ns))
-    info('ms:{}'.format(ms))
-    info('rec:{}'.format(rec))
-    info('<k>:{}'.format(ks))
 
     df = pd.DataFrame(data)
     csvpath = pjoin(outdir, 'results.csv')
@@ -156,6 +146,9 @@ if __name__ == "__main__":
     info(datetime.date.today())
     t0 = time.time()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--npoints', default=40, type=int, help='Number of points')
+    parser.add_argument('--alpha', default=20., type=float, help='Factor of the exponent')
+    parser.add_argument('--walklen', default=50, type=int, help='Walk length')
     parser.add_argument('--seed', default=0, type=int, help='Output directory')
     parser.add_argument('--outdir', default='/tmp/out/', help='Output directory')
     args = parser.parse_args()
@@ -163,7 +156,7 @@ if __name__ == "__main__":
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
 
-    main(args.seed, args.outdir)
+    main(args.seed, args.npoints, args.alpha, args.walklen, args.outdir)
 
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))
