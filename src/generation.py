@@ -70,12 +70,13 @@ def plot_walk2(walk, coords, outdir):
         plt.savefig(outpath); plt.close()
 
 ##########################################################
-def main(seed, npoints, a, l, outdir):
+def main(seed, npoints, a, outdir):
     info(inspect.stack()[0][3] + '()')
 
     random.seed(seed); np.random.seed(seed)
 
     coords = np.random.rand(npoints, 2)
+    l = npoints * 10
     b = 1
     v0 = np.random.randint(npoints) # Choice of starting vertex
 
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--npoints', default=40, type=int, help='Number of points')
     parser.add_argument('--alpha', default=20., type=float, help='Factor of the exponent')
-    parser.add_argument('--walklen', default=50, type=int, help='Walk length')
+    # parser.add_argument('--walklen', default=50, type=int, help='Walk length')
     parser.add_argument('--seed', default=0, type=int, help='Output directory')
     parser.add_argument('--outdir', default='/tmp/out/', help='Output directory')
     args = parser.parse_args()
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
 
-    main(args.seed, args.npoints, args.alpha, args.walklen, args.outdir)
+    main(args.seed, args.npoints, args.alpha, args.outdir)
 
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))
