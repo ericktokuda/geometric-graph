@@ -110,8 +110,8 @@ def main(seed, npoints, a, outdir):
             if (sampled > bin0) and (sampled <= bin1):
                 walk[i+1] = inds[vcur, j]
 
-                newarc = True if (adj[walk[i], walk[i+1]] == 0) else False
-                newvtx = True if (walk[i+1] in walk[:i+1]) else False
+                newarc = False if (adj[walk[i], walk[i+1]] > 0) else True
+                newvtx = False if (walk[i+1] in walk[:i+1]) else True
                 symm = True if adj[walk[i+1], walk[i]] > 0 else False
 
                 adj[walk[i], walk[i+1]] += 1
