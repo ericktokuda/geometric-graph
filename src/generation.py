@@ -118,7 +118,7 @@ def main(seed, npoints, a, outdir):
 
                 ns[i+1] = ns[i] + 1 if newvtx else ns[i]
                 ms[i+1] = ms[i] + 1 if newarc else ms[i]
-                paired[i+1] = ms[i] + 2 if (newarc and symm) else ms[i]
+                paired[i+1] = paired[i] + 2 if (newarc and symm) else paired[i]
                 break
             bin0 = bin1
         assert j <= npoints
