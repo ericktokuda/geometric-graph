@@ -123,8 +123,9 @@ def main(seed, npoints, a, outdir):
             bin0 = bin1
         assert j <= npoints
 
+    ms[0] = 1 # Reciprocity when there is no arcs (avoid division by zero)
     rec = paired.astype(float) / ms
-    rec[0] = 0 # Reciprocity when there is no arcs (avoid division by zero)
+    ms[0] = 0 # Correct value
     ks = ms / ns
 
     data = {}
