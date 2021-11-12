@@ -22,23 +22,22 @@ def main(outdir):
     respath = './data/results.csv'
     df = pd.read_csv(respath)
 
-    W = 640; H = 480
+    W = 1200; H = 960
+    spl = 10 # Plot every spl points
 
     for feat in ['vcount', 'acount', 'recipr', 'k']:
         fig, ax = plt.subplots(figsize=(W*.01, H*.01), dpi=100)
-        
+
         for a in sorted(np.unique(df.alpha)):
             df2 = df.loc[df.alpha == a]
-            xs = np.unique(df2.step.values)
-            ys = df2.groupby('seed')[feat].mean()
-            yerr = df2.groupby('seed')[feat].std()
-            print(len(xs), len(ys), len(yerr))
-            breakpoint()
-            
+            xs = np.unique(df2.step.values)[::spl]
+            ys = df2.groupby(['step'])[feat].mean()[::spl]
+            yerr = df2.groupby(['step'])[feat].std()[::spl]
             ax.errorbar(xs, ys, yerr, alpha=.5, label=a)
-            # ax.plot(df2.step, df2[feat], alpha=.5, label=a)
-            outpath = pjoin(outdir, feat + '.png')
-            plt.legend()
+            ax.set_ylabel(feat.capitalize())
+            ax.set_xlabel('Time')
+            outpath = pjoin(outdir, feat + '.pdf')
+        plt.legend()
         plt.savefig(outpath); plt.close()
     info('For Aiur!')
 
