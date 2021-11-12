@@ -18,6 +18,7 @@ import scipy
 from scipy.spatial.distance import cdist
 import random
 import pandas as pd
+from numpy.random import multivariate_normal
 
 ##########################################################
 def plot_walk1(walk, coords, outdir):
@@ -70,12 +71,20 @@ def plot_walk2(walk, coords, outdir):
         plt.savefig(outpath); plt.close()
 
 ##########################################################
-def main(seed, npoints, a, outdir):
+def run_experiment(npoints, distrib, a, seed, outdir):
     info(inspect.stack()[0][3] + '()')
 
     random.seed(seed); np.random.seed(seed)
+    if distrib == 'uniform':
+        coords = np.random.rand(npoints, 2)
+    elif distrib == 'normal':
+        cov = np.eye(2) * .05
+        coords = multivariate_normal([.5, .5], cov, npoints*2)[:npoints, :]
 
-    coords = np.random.rand(npoints, 2)
+    plt.scatter(coords[:, 0], coords[:, 1])
+    plt.xlim(0, 1); plt.ylim(0, 1)
+    plt.savefig(pjoin(outdir, '{:03d}.png'.format(seed))); plt.close()
+
     l = npoints * 10
     b = 1
     v0 = np.random.randint(npoints) # Choice of starting vertex
@@ -130,19 +139,36 @@ def main(seed, npoints, a, outdir):
 
     data = {}
     data['alpha'] = [a] * (l+1)
-    data['walk'] = walk
-    data['vcount'] = ns
-    data['acount'] = ms
-    data['recipr'] = rec
-    data['k'] = ks
+    data['walk'] = walk.tolist()
+    data['vcount'] = ns.tolist()
+    data['acount'] = ms.tolist()
+    data['recipr'] = rec.tolist()
+    data['k'] = ks.tolist()
+    data['seed'] = [seed] * (l+1)
 
-    df = pd.DataFrame(data)
-    csvpath = pjoin(outdir, 'results.csv')
-    df.to_csv(csvpath, index=True, index_label='step')
+    return data
 
     # Plot
     # plot_walk1(walk, coords, outdir)
     # plot_walk2(walk, coords, outdir)
+
+##########################################################
+def main(npoints, distrib, a, nrealizations, seed, outdir):
+    info(inspect.stack()[0][3] + '()')
+    seeds = list(range(seed))
+    data = {}
+    for r in range(nrealizations):
+        seed = r + seed
+        ret = run_experiment(npoints, distrib, a, seed, outdir)
+        if len(data) == 0:
+            data = ret
+        else: 
+            for k in data.keys():
+                data[k] += ret[k]
+
+    df = pd.DataFrame(data)
+    csvpath = pjoin(outdir, 'results.csv')
+    df.to_csv(csvpath, index=True, index_label='step')
 
 ##########################################################
 if __name__ == "__main__":
@@ -150,8 +176,9 @@ if __name__ == "__main__":
     t0 = time.time()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--npoints', default=40, type=int, help='Number of points')
+    parser.add_argument('--distrib', default='uniform', type=str, help='Distribution of points')
     parser.add_argument('--alpha', default=20., type=float, help='Factor of the exponent')
-    # parser.add_argument('--walklen', default=50, type=int, help='Walk length')
+    parser.add_argument('--nrealizations', default=1, type=int, help='Number of realizations')
     parser.add_argument('--seed', default=0, type=int, help='Output directory')
     parser.add_argument('--outdir', default='/tmp/out/', help='Output directory')
     args = parser.parse_args()
@@ -159,7 +186,8 @@ if __name__ == "__main__":
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
 
-    main(args.seed, args.npoints, args.alpha, args.outdir)
+    main(args.npoints, args.distrib, args.alpha,
+            args.nrealizations, args.seed, args.outdir)
 
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))

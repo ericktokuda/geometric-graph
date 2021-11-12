@@ -32,7 +32,7 @@ def main(outdir):
             ax.plot(df2.step, df2[feat], alpha=.5, label=a)
             outpath = pjoin(outdir, feat + '.png')
             plt.legend()
-            plt.savefig(outpath)
+        plt.savefig(outpath); plt.close()
     info('For Aiur!')
 
 
