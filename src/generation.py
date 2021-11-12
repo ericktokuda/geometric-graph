@@ -169,7 +169,7 @@ def main(npoints, distrib, a, nrealizations, seed, outdir):
 
     df = pd.DataFrame(data)
     csvpath = pjoin(outdir, 'results.csv')
-    df.to_csv(csvpath, index=True, index=False)
+    df.to_csv(csvpath, index=False)
 
 ##########################################################
 if __name__ == "__main__":
