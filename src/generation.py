@@ -138,6 +138,7 @@ def run_experiment(npoints, distrib, a, seed, outdir):
     ks = ms / ns
 
     data = {}
+    data['step'] = list(range(l+1))
     data['alpha'] = [a] * (l+1)
     data['walk'] = walk.tolist()
     data['vcount'] = ns.tolist()
@@ -168,7 +169,7 @@ def main(npoints, distrib, a, nrealizations, seed, outdir):
 
     df = pd.DataFrame(data)
     csvpath = pjoin(outdir, 'results.csv')
-    df.to_csv(csvpath, index=True, index_label='step')
+    df.to_csv(csvpath, index=True, index=False)
 
 ##########################################################
 if __name__ == "__main__":
