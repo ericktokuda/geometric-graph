@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Plots
-"""
+"""Plots """
 
 import argparse
 import time, datetime
@@ -20,16 +19,24 @@ def main(outdir):
     """Short description"""
     info(inspect.stack()[0][3] + '()')
 
-    respath = './data/resultsall.csv'
+    respath = './data/results.csv'
     df = pd.read_csv(respath)
 
     W = 640; H = 480
 
     for feat in ['vcount', 'acount', 'recipr', 'k']:
         fig, ax = plt.subplots(figsize=(W*.01, H*.01), dpi=100)
+        
         for a in sorted(np.unique(df.alpha)):
             df2 = df.loc[df.alpha == a]
-            ax.plot(df2.step, df2[feat], alpha=.5, label=a)
+            xs = np.unique(df2.step.values)
+            ys = df2.groupby('seed')[feat].mean()
+            yerr = df2.groupby('seed')[feat].std()
+            print(len(xs), len(ys), len(yerr))
+            breakpoint()
+            
+            ax.errorbar(xs, ys, yerr, alpha=.5, label=a)
+            # ax.plot(df2.step, df2[feat], alpha=.5, label=a)
             outpath = pjoin(outdir, feat + '.png')
             plt.legend()
         plt.savefig(outpath); plt.close()
