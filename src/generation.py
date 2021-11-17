@@ -137,6 +137,12 @@ def run_experiment(npoints, distrib, a, seed, outdir):
     ms[0] = 0 # Correct value
     ks = ms / ns
 
+    import networkx as nx
+    g = nx.from_numpy_matrix(adj)
+    txt = '\n'.join(nx.generate_adjlist(g))
+    open(pjoin(outdir, '{:03d}.adj'.format(seed)), 'w').write(txt)
+    breakpoint()
+
     data = {}
     data['step'] = list(range(l+1))
     data['alpha'] = [a] * (l+1)
@@ -163,7 +169,7 @@ def main(npoints, distrib, a, nrealizations, seed, outdir):
         ret = run_experiment(npoints, distrib, a, seed, outdir)
         if len(data) == 0:
             data = ret
-        else: 
+        else:
             for k in data.keys():
                 data[k] += ret[k]
 
