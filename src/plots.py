@@ -44,21 +44,40 @@ def main(outdir):
         plt.legend()
         plt.savefig(outpath); plt.close()
 
-    # Write to csv
-    spl = 100 # Plot every spl points
+    # Print latex
+    spl = 300
     for feat in ['vcount', 'recipr', 'k']:
         data = []
         xs = steps[::spl]
         for a in sorted(alphas):
             df2 = df.loc[df.alpha == a]
             ys = df2.groupby(['step'])[feat].mean()[::spl]
-            yerr = df2.groupby(['step'])[feat].std()[::spl]
+            # yerr = df2.groupby(['step'])[feat].std()[::spl]
             data.append(ys)
         data = np.array(data).T
         df3 = pd.DataFrame(data, columns=[str(a) for a in alphas])
-        print('##########################################################')
-        print(feat)
-        print(df3.to_latex())
+        # print(df3.to_latex())
+
+    # Plot image req. by luciano
+    spl = 1 # Plot every spl points
+    data = []
+    for feat in ['vcount', 'recipr', 'k']:
+        xs = steps[::spl]
+        d = []
+        for a in sorted(alphas):
+            df2 = df.loc[df.alpha == a]
+            ys = df2.groupby(['step'])[feat].mean()[::spl]
+            # yerr = df2.groupby(['step'])[feat].std()[::spl]
+            d.append(ys)
+        data.append(np.array(d).T)
+    data = np.array(data)
+
+    tgt = [400, .25, 3] # nvert, recipr, k
+
+    loss = np.zeros((data.shape[1], data.shape[2]))
+    for i in range(data.shape[0]):
+        loss += np.power(data[i, :, :] - tgt[i], 2)
+    ind = np.unravel_index(np.argmin(loss, axis=None), loss.shape)
 
 ##########################################################
 if __name__ == "__main__":
