@@ -15,6 +15,60 @@ from myutils import info, create_readme
 import pandas as pd
 
 ##########################################################
+def get_dir_max(losses, ind0):
+    """Get the neighbouring pixel which corresponds to the largest gradient
+    magnitude"""
+    ind0 = np.array(ind0)
+    curloss = losses[ind0[0], ind0[1]]
+    
+    # x0, y0 = ind
+    dirs_ = np.array([
+        [+ 1,   0 ], [  0, + 1 ],
+        [- 1,   0 ], [  0, - 1 ], ])
+
+    maxdiff = 0
+    dirmax = ind0
+    h, w = losses.shape
+
+    for dir_ in dirs_:
+        i, j = np.array(ind0 + dir_)
+        if (i < 0) or (i >= h) or (j < 0) or (j >= w): continue
+        curdiff = losses[i, j] - curloss
+        if curdiff > maxdiff:
+            dirmax = dir_
+            maxdiff = curdiff
+    return dirmax
+
+##########################################################
+def gradient_descent(losses, ind0, lr0):
+    errthresh = 1e-3 # Error threshold
+    maxsteps = 1000
+    curerr = 99999
+    step = 0
+    lr = lr0
+    losstgt = 0 # Target loss
+
+    h, w = losses.shape
+
+    ind = ind0
+    while (step < maxsteps) and (curerr > errthresh):
+        dirmax =  get_dir_max(losses, ind0)
+        ind = ind - lr * dirmax
+        ind = np.array([int(np.round(ind[0])), int(np.round(ind[1]))])
+
+        if ind[0] < 0: ind[0] = 0 # Clip values
+        elif ind[0] > h: ind[0] = h - 1
+        if ind[1] < 0: ind[1] = 0
+        elif ind[1] >= w: ind[1] = w - 1
+
+        curloss = losses[ind[0], ind[1]]
+        curerr = np.abs(losstgt - curloss)
+        # print(curloss)
+        step += 1
+    print('predind:{}'.format(ind))
+
+    
+##########################################################
 def main(outdir):
     """Short description"""
     info(inspect.stack()[0][3] + '()')
@@ -74,10 +128,15 @@ def main(outdir):
 
     tgt = [400, .25, 3] # nvert, recipr, k
 
-    loss = np.zeros((data.shape[1], data.shape[2]))
+    losses = np.zeros((data.shape[1], data.shape[2]))
     for i in range(data.shape[0]):
-        loss += np.power(data[i, :, :] - tgt[i], 2)
-    ind = np.unravel_index(np.argmin(loss, axis=None), loss.shape)
+        losses += np.power(data[i, :, :] - tgt[i], 2)
+    ind = np.unravel_index(np.argmin(losses, axis=None), losses.shape)
+    print('minind:{}'.format(ind))
+
+    ind0 = (5, 5)
+    lr0 = 5
+    gradient_descent(losses, ind0, lr0)
 
 ##########################################################
 if __name__ == "__main__":
