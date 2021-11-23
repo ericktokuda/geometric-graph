@@ -67,7 +67,7 @@ def gradient_descent(losses, ind0, lr0):
         step += 1
     print('predind:{}'.format(ind))
 
-    
+
 ##########################################################
 def main(outdir):
     """Short description"""
@@ -131,7 +131,22 @@ def main(outdir):
     losses = np.zeros((data.shape[1], data.shape[2]))
     for i in range(data.shape[0]):
         losses += np.power(data[i, :, :] - tgt[i], 2)
+
+
+    loss = losses[::300]
+    from sklearn.preprocessing import MinMaxScaler
+    scaler = MinMaxScaler((0, 255))
+    normloss = scaler.fit_transform(loss).astype(int)
+    plt.imshow(normloss)
+    plt.colorbar()
+    plt.savefig('/tmp/loss.png')
+
     ind = np.unravel_index(np.argmin(losses, axis=None), losses.shape)
+    steppred = steps[ind[0]]
+    alphapred = alphas[ind[1]]
+
+    print(steppred, alphapred)
+
     print('minind:{}'.format(ind))
 
     ind0 = (5, 5)
