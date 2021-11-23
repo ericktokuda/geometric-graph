@@ -83,21 +83,22 @@ def main(outdir):
     spl = 10 # Plot every spl points
 
     # Plot evolution in time of each feature
-    for feat in ['vcount', 'acount', 'recipr', 'k']:
-        fig, ax = plt.subplots(figsize=(W*.01, H*.01), dpi=100)
-        xs = steps[::spl]
-        for a in sorted(alphas):
-            df2 = df.loc[df.alpha == a]
-            ys = df2.groupby(['step'])[feat].mean()[::spl]
-            yerr = df2.groupby(['step'])[feat].std()[::spl]
+    # for feat in ['vcount', 'acount', 'recipr', 'k']:
+        # fig, ax = plt.subplots(figsize=(W*.01, H*.01), dpi=100)
+        # xs = steps[::spl]
+        # for a in sorted(alphas):
+            # df2 = df.loc[df.alpha == a]
+            # ys = df2.groupby(['step'])[feat].mean()[::spl]
+            # yerr = df2.groupby(['step'])[feat].std()[::spl]
             # ax.plot(xs, np.power(ys, 3), alpha=.5, label=a)
-            ax.errorbar(xs, ys, yerr, alpha=.5, label=a)
-            ax.set_ylabel(feat.capitalize())
-            ax.set_xlabel('Time')
-        outpath = pjoin(outdir, feat + '.pdf')
-        plt.legend()
-        plt.savefig(outpath); plt.close()
+            # ax.errorbar(xs, ys, yerr, alpha=.5, label=a)
+            # ax.set_ylabel(feat.capitalize())
+            # ax.set_xlabel('Time')
+        # outpath = pjoin(outdir, feat + '.pdf')
+        # plt.legend()
+        # plt.savefig(outpath); plt.close()
 
+    
     # Print latex
     spl = 300
     for feat in ['vcount', 'recipr', 'k']:
@@ -108,9 +109,82 @@ def main(outdir):
             ys = df2.groupby(['step'])[feat].mean()[::spl]
             # yerr = df2.groupby(['step'])[feat].std()[::spl]
             data.append(ys)
-        data = np.array(data).T
+        data = np.array(data).T # cols:alphas, rows:time
         df3 = pd.DataFrame(data, columns=[str(a) for a in alphas])
         # print(df3.to_latex())
+        from scipy.optimize import curve_fit, leastsq
+
+        # def func1(x, a, b, c): return a * np.exp(-b * x) + c
+        # def func2(x, a, b, c):
+            # breakpoint()
+            # return a * x + b
+
+        def func3(xy, a, b, c, d, e, f):
+            x, y = xy
+            return a * np.power(x, 2)  + b * np.power(y, 2) + \
+                c * x * y + d * x + e * y + f
+
+
+        alphas = np.unique(df.alpha)
+        times = steps[::spl]
+        xx, yy = np.meshgrid(alphas, times)
+        xx = xx.flatten()
+        yy = yy.flatten()
+        zz = data.flatten()
+        ind = np.vstack((xx, yy))
+        # dep = zz.reshape(-1, 1)
+        dep = zz
+        p0 = [1, 1, 1, 1, 1, 1]
+        popt, pcov = curve_fit(func3, (xx, yy), zz, p0)
+        
+        # popt, pcov = leastsq(func2, (xx, yy), zz, p0)
+        # popt, pcov = curve_fit(func2, ind, dep)
+
+        # from sklearn.linear_model import LinearRegression
+        # from sklearn.preprocessing import PolynomialFeatures
+        # X = np.vstack((xx, yy)).T
+        # y = zz
+        # reg = LinearRegression()
+        # reg = PolynomialFeatures(degree=2)
+        # reg = reg.fit(X, y)
+
+        from matplotlib import cm
+        from matplotlib.ticker import LinearLocator
+
+        def ScatterPlot(x_data, y_data, z_data):
+            fig, axes = plt.subplots(subplot_kw={"projection": "3d"})
+            # f = plt.figure()
+
+            # matplotlib.pyplot.grid(True)
+            # from mpl_toolkits.mplot3d import  Axes3D
+            # axes = Axes3D(f)
+
+            axes.scatter(x_data, y_data, z_data)
+
+            axes.set_title('Scatter Plot (click-drag with mouse)')
+            axes.set_xlabel('alpha')
+            axes.set_ylabel('step')
+            axes.set_zlabel(feat)
+
+            plt.savefig(pjoin(outdir, feat + '.png'))
+            plt.close('all')
+
+        ScatterPlot(xx, yy, zz)
+
+
+        # Plot the surface.
+        xx, yy = np.meshgrid(alphas, times)
+        zz = func3((xx, yy), *popt)
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        # surf = ax.plot_surface(xx, yy, zz, cmap=cm.coolwarm,
+                               # linewidth=0, antialiased=False)
+        surf = ax.plot_wireframe(xx, yy, zz)
+                               # linewidth=0, antialiased=False)
+
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        plt.savefig(pjoin(outdir, '{}_3d.png'.format(feat)))
+        plt.close()
 
     # Plot image req. by luciano
     spl = 1 # Plot every spl points
@@ -133,6 +207,7 @@ def main(outdir):
         losses += np.power(data[i, :, :] - tgt[i], 2)
 
 
+    # Plot loss map
     loss = losses[::300]
     from sklearn.preprocessing import MinMaxScaler
     scaler = MinMaxScaler((0, 255))
@@ -140,6 +215,7 @@ def main(outdir):
     plt.imshow(normloss)
     plt.colorbar()
     plt.savefig('/tmp/loss.png')
+
 
     ind = np.unravel_index(np.argmin(losses, axis=None), losses.shape)
     steppred = steps[ind[0]]
