@@ -16,9 +16,26 @@ from myutils import info, create_readme
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from scipy.optimize import curve_fit, leastsq
+from sklearn.metrics import r2_score
 
 ##########################################################
 W = 1200; H = 960
+
+##########################################################
+def poly(xy, deg, *coeffs):
+    x, y = xy
+    k = 0
+    s = 0 
+    for i in range(deg + 1):
+        for j in range(deg + 1):
+            s += coeffs[k] * np.power(x, i) * np.power(y, j)
+            k += 1
+    return s
+
+##########################################################
+def poly2(xy, *coeffs): return poly(xy, 2, *coeffs)
+def poly3(xy, *coeffs): return poly(xy, 3, *coeffs)
+POLYS = {2: poly2, 3: poly3}
 
 ##########################################################
 def get_dir_minmax(losses, ind0, optm='max'):
@@ -29,8 +46,10 @@ def get_dir_minmax(losses, ind0, optm='max'):
     
     # x0, y0 = ind
     dirs_ = np.array([
-        [+ 1,   0 ], [  0, + 1 ],
-        [- 1,   0 ], [  0, - 1 ], ])
+        [+ 1,   0 ], [  0, +1 ],
+        [- 1,   0 ], [  0, -1 ],
+        [- 1,  -1 ], [ +1, +1 ],
+        ])
 
     refdiff = 99999999 if optm == 'min' else 0
     refdir = ind0
@@ -191,8 +210,12 @@ def get_min(losses, smpvals, outdir):
     i0, j0 = minind 
     if i0 > 0 and i0 < h - 1 and j0 > 0 and j0 < w - 1:
         dir_ = get_dir_minmax(losses, minind, optm='min')
-        # print(losses[i0-1, i0)
-        breakpoint()
+        # TODO: choose a fractional step size to walk in opposite direction of dir_
+        # ii, jj = np.meshgrid([i0-1, i0, i0+1], [j0-1, j0, j0+1])
+        # print(losses[ii, jj] - losses[i0, j0])
+        # print(dir_)
+        # print(losses[ii, jj])
+        # print(losses[ii, jj].astype(int))
             
         # xx = np.array([steps[i0 - 1], steps[i0], steps[i0 + 1]])
         # yy = np.array([alphas[j0 - 1], alphas[j0], alphas[j0 + 1]])
@@ -208,9 +231,24 @@ def get_min(losses, smpvals, outdir):
     return minind
 
 ##########################################################
-def estimate_min(losses, smpvals, outdir):
-    # TODO: Try to walk in the direction of min increase
+def estimate_min(tgt, data, smpvals, outdir):
 
+    xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
+    popts = []
+    m = data.shape[0]
+    for featidx in range(m):
+        zs = data[featidx, :, :]
+        f, popt, err = fit_polynomial(xs, ys, zs, 2)
+        popts.append(popt)
+
+    x0, y0 = 100, 22
+    costs2 = [ np.power(tgt[i] - f((x0, y0), *(popts[i])), 2) for i in range(m) ]
+    # cost2 = 0
+    # for i in range(m): cost2 += np.power(tgt[i] - f((x0, y0), *(popts[i])), 2)
+    cost = np.sqrt(np.sum(costs2))
+    print(cost)
+    breakpoint()
+    
     ind0 = (7, 1)
     lr0 = 10 
     predind, pathinds = gradient_descent(losses, ind0, lr0)
@@ -219,7 +257,7 @@ def estimate_min(losses, smpvals, outdir):
     alphapred = smpvals['alpha'][predind[1]]
     print('PRED: step, alpha, ind, loss:', steppred, alphapred, predind,
             losses[predind[0], predind[1]])
-    breakpoint()
+    # breakpoint()
     
     return predind
 
@@ -258,26 +296,43 @@ def fit_polynomials(deg, xs, ys, data, feats, outdir):
     yflat = ys.flatten()
     p0 = [1] * np.power(deg + 1, 2)
 
-    def poly(xy, *coeffs):
-        x, y = xy
-        k = 0
-        s = 0 
-        for i in range(deg + 1):
-            for j in range(deg + 1):
-                s += coeffs[k] * np.power(x, i) * np.power(y, j)
-                k += 1
-        return s
+    if deg == 2: fun = poly2
+    elif deg == 3: fun = poly3
 
+    popts = []
     for i, feat in enumerate(feats):
         zs = data[i, :, :]
         zflat = zs.flatten()
-        popt, pcov = curve_fit(poly, (xflat, yflat), zflat, p0)
-        zspred = poly((xs, ys), *popt)
+        popt, pcov = curve_fit(fun, (xflat, yflat), zflat, p0)
+        zspred = fun((xs, ys), *popt)
         
-        # plot_wireframe3d(xs, ys, zs, pjoin(outdir, feat + '_orig_wframe.png'))
-        plot_scatter3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_wframe.png'))
+        plot_scatter3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_scatter.png'))
         plot_wireframe3d(xs, ys, zspred, pjoin(outdir, feat + '_2pred_wframe.png'))
         plot_wireframe3d(xs, ys, zs - zspred, pjoin(outdir, feat + '_3diff_wframe.png'))
+        popts.append(popt)
+    return fun, popts
+
+##########################################################
+def fit_polynomial(xs, ys, zs, deg):
+    """Fit a polynomial of degree @deg"""
+    info(inspect.stack()[0][3] + '()')
+    xflat = xs.flatten()
+    yflat = ys.flatten()
+    p0 = [1] * np.power(deg + 1, 2)
+
+    fun = POLYS[deg]
+
+    zflat = zs.flatten()
+    popt, pcov = curve_fit(fun, (xflat, yflat), zflat, p0)
+    zspred = fun((xs, ys), *popt)
+    # plot_scatter3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_scatter.png'))
+    # plot_wireframe3d(xs, ys, zspred, pjoin(outdir, feat + '_2pred_wframe.png'))
+    # plot_wireframe3d(xs, ys, zs - zspred, pjoin(outdir, feat + '_3diff_wframe.png'))
+
+    avgerr = np.mean(np.abs(zflat - zspred.flatten()))
+    # r2 = r2_score(zflat, zspred.flatten())
+    
+    return fun, popt, avgerr
 
 ##########################################################
 def get_ranges(df, feats):
@@ -331,13 +386,12 @@ def main(outdir):
     # print_features_latex(df, feats)
     # data, smpvals = get_average_values(df, feats, 1);  interpolate_one_axis(data, smpvals)
 
+    tgt=[300, .25, 3]
     data, smpvals = get_average_values(df, feats, 100)
-    losses = get_loss(data, tgt=[300, .25, 3], outdir=outdir)
+    losses = get_loss(data, tgt, outdir)
     minidx = get_min(losses, smpvals, outdir)
-    lossmin = estimate_min(losses, smpvals, outdir)
-    breakpoint()
-    
-    return
+    lossmin = estimate_min(tgt, data, smpvals, outdir)
+    # breakpoint()
     
     # data, smpvals = get_average_values(df, feats, 300)
     # data = data[:, 1:, :]
@@ -345,7 +399,7 @@ def main(outdir):
     xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
 
     os.makedirs(pjoin(outdir, 'poly2'), exist_ok=True)
-    fit_polynomials(2, xs, ys, data, feats, pjoin(outdir, 'poly2'))
+    f, popts = fit_polynomials(2, xs, ys, data, feats, pjoin(outdir, 'poly2'))
     os.makedirs(pjoin(outdir, 'poly3'), exist_ok=True)
     fit_polynomials(3, xs, ys, data, feats, pjoin(outdir, 'poly3'))
 
