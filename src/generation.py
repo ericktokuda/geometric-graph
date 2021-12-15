@@ -141,7 +141,6 @@ def run_experiment(npoints, distrib, a, seed, outdir):
     g = nx.from_numpy_matrix(adj)
     txt = '\n'.join(nx.generate_adjlist(g))
     open(pjoin(outdir, '{:03d}.adj'.format(seed)), 'w').write(txt)
-    breakpoint()
 
     data = {}
     data['step'] = list(range(l+1))
