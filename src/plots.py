@@ -172,10 +172,28 @@ def get_loss(data, tgt, outdir):
 
     losses = np.zeros((data.shape[1], data.shape[2]))
     for i in range(data.shape[0]):
-        losses += np.power(data[i, :, :] - tgt[i], 2)
+        vmin, vmax = np.min(data[i, :, :]), np.max(data[i, :, :])
+        d = (data[i, :, :] - vmin) / (vmax - vmin)
+        t = (tgt[i] - vmin) / (vmax - vmin)
+        # scaler = MinMaxScaler().fit(data[i, :, :])
+        # d kj= scaler.transform(data[i, :, :])
+        # breakpoint(
+        # dc= scaler.transform(data[i, :, :])
+        
+        # t = scaler.transform(tgt[i])
+        # print(np.min(d), np.max(d), t)
+        diff = d - t
+        # diff = MinMaxScaler().fit_transform(diff)
 
+        # diff = data[i, :, :] - tgt[i]
+        # diff = MinMaxScaler().fit_transform(diff)
+
+        losses += np.power(diff, 2)
+    print(np.mean(losses))
+
+    loss = losses
     # Plot loss map
-    loss = losses[::300]
+    # loss = losses[::300]
     scaler = MinMaxScaler((0, 255))
     normloss = scaler.fit_transform(loss).astype(int)
     plt.imshow(normloss)
@@ -306,9 +324,10 @@ def fit_polynomials(deg, xs, ys, data, feats, outdir):
         popt, pcov = curve_fit(fun, (xflat, yflat), zflat, p0)
         zspred = fun((xs, ys), *popt)
         
-        plot_scatter3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_scatter.png'))
-        plot_wireframe3d(xs, ys, zspred, pjoin(outdir, feat + '_2pred_wframe.png'))
-        plot_wireframe3d(xs, ys, zs - zspred, pjoin(outdir, feat + '_3diff_wframe.png'))
+        # plot_scatter3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_scatter.png'))
+        # plot_wireframe3d(xs, ys, zs, pjoin(outdir, feat + '_1orig_wframe.png'))
+        # plot_wireframe3d(xs, ys, zspred, pjoin(outdir, feat + '_2pred_wframe.png'))
+        # plot_wireframe3d(xs, ys, zs - zspred, pjoin(outdir, feat + '_3diff_wframe.png'))
         popts.append(popt)
     return fun, popts
 
@@ -382,26 +401,123 @@ def main(outdir):
     df = pd.read_csv(respath)
 
     franges = get_ranges(df, feats)
+    
     # plot_features_across_time(df, feats, outdir)
+    return
+    
     # print_features_latex(df, feats)
     # data, smpvals = get_average_values(df, feats, 1);  interpolate_one_axis(data, smpvals)
 
-    tgt=[300, .25, 3]
+    coeffstr =  'a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p'.split(',')
+
+    eqstr = ''
+    for i in range(4):
+        for j in range(4):
+            eqstr += '{}*x^{}*y^{}+'.format(coeffstr[i*4 + j], i, j)
+    eqstr = eqstr[:-1]
+
+    # Using this webtool https://www.derivative-calculator.net/
+    fstr = 'a*x^0*y^0+b*x^0*y^1+c*x^0*y^2+d*x^0*y^3+e*x^1*y^0+f*x^1*y^1+g*x^1*y^2+h*x^1*y^3+i*x^2*y^0+j*x^2*y^1+k*x^2*y^2+l*x^2*y^3+m*x^3*y^0+n*x^3*y^1+o*x^3*y^2+p*x^3*y^3'
+    dxstr = '3*p*y^3*x^2+3*o*y^2*x^2+3*n*y*x^2+3*m*x^2+2*l*y^3*x+2*k*y^2*x+2*j*y*x+2*i*x+h*y^3+g*y^2+f*y+e'
+    dystr = '3*p*x^3*y^2+3*l*x^2*y^2+3*h*x*y^2+3*d*y^2+2*o*x^3*y+2*k*x^2*y+2*g*x*y+2*c*y+n*x^3+j*x^2+f*x+b'
+
+    tgts = [[300, .50, 5],
+            [150, .50, 5],
+            [450, .50, 5],
+            [300, .20, 5],
+            [300, .70, 5],
+            [300, .50, 3],
+            [300, .50, 7],
+            [300, .10, 5],
+            [300, .30, 5],
+            [300, .20, 5],
+            [300, .10, 5],
+            [300, .30, 5],
+            [300, .30, 6],
+            [300, .30, 4],
+            ]
+
     data, smpvals = get_average_values(df, feats, 100)
-    losses = get_loss(data, tgt, outdir)
-    minidx = get_min(losses, smpvals, outdir)
-    lossmin = estimate_min(tgt, data, smpvals, outdir)
+
+    # print(data)
+    # print(np.min(data), np.max(data))
     # breakpoint()
+    
+    xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
+    
+    for tt, tgt in enumerate(tgts):
+        # losses = get_loss(data, tgt, outdir)
+        # print(np.min(losses), np.max(losses))
+        outpath = pjoin(outdir, '{}_{}_{}.png'.format(*tgt))
+        # plot_wireframe3d(xs, ys, losses, outpath)
+        fun, popts = fit_polynomials(3, xs, ys, data, feats, outdir)
+
+        losses = np.zeros(xs.shape)
+        for i in range(3):
+            fitted = xs.copy()
+            for ii in range(fitted.shape[0]):
+                for jj in range(fitted.shape[1]):
+                    # print(i, ii, jj)
+                    fitted[ii, jj] = fun((xs[ii, jj], ys[ii, jj]), *(popts[i]))
+            
+            vmin, vmax = np.min(fitted), np.max(fitted)
+            # diff = fitted - tgt[i]
+            d = (fitted - vmin) / (vmax - vmin)
+            t = (tgt[i] - vmin) / (vmax - vmin)
+            diff = d - t
+            losses += np.power(diff, 2)
+            
+            # for i in range(data.shape[0]):
+                # vmin, vmax = np.min(data[i, :, :]), np.max(data[i, :, :])
+                # d = (data[i, :, :] - vmin) / (vmax - vmin)
+                # t = (tgt[i] - vmin) / (vmax - vmin)
+                # diff = d - t
+                # losses += np.power(diff, 2)
+
+            # losses = get_loss(fitted, tgt, outdir)
+        
+        # fun((5, 5), *(popts[i]))
+# def poly3(xy, *coeffs): return poly(xy, 3, *coeffs)
+        plot_wireframe3d(xs, ys, losses, outpath)
+
+    return
+    def fun3(x, y, *coeffs):
+        k = 0
+        f = 0 
+        for i in range(4):
+            for j in range(4):
+                f += coeffs[k] * np.power(x, i) * np.power(y, j)
+                k += 1
+        return f
+
+    return
+
+    import sympy
+    x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = sympy.symbols(
+            'x y a b c d e f g h i j k l m n o p')
+    u = fun3(x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+    print('f(x,y) = ', u)
+    g = [u.diff(x), u.diff(y)]
+    print('grad f(x,y) =', g)
+
+    # return 
+    tgt = [300, .30, 4]
+    data, smpvals = get_average_values(df, feats, 300)
+    losses = get_loss(data, tgt, outdir)
+    # minidx = get_min(losses, smpvals, outdir)
+    # lossmin = estimate_min(tgt, data, smpvals, outdir)
     
     # data, smpvals = get_average_values(df, feats, 300)
     # data = data[:, 1:, :]
     # smpvals['step'] =  smpvals['step'][1:]
     xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
 
-    os.makedirs(pjoin(outdir, 'poly2'), exist_ok=True)
-    f, popts = fit_polynomials(2, xs, ys, data, feats, pjoin(outdir, 'poly2'))
-    os.makedirs(pjoin(outdir, 'poly3'), exist_ok=True)
-    fit_polynomials(3, xs, ys, data, feats, pjoin(outdir, 'poly3'))
+    # os.makedirs(pjoin(outdir, 'poly2'), exist_ok=True)
+    # f, popts = fit_polynomials(2, xs, ys, data, feats, pjoin(outdir, 'poly2'))
+    odir = pjoin(outdir, str(i), 'poly3')
+    os.makedirs(odir, exist_ok=True)
+    fit_polynomials(3, xs, ys, data, feats, odir)
+
 
 ##########################################################
 if __name__ == "__main__":
