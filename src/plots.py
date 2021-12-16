@@ -17,6 +17,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from scipy.optimize import curve_fit, leastsq
 from sklearn.metrics import r2_score
+import sympy
 
 ##########################################################
 W = 1200; H = 960
@@ -25,7 +26,7 @@ W = 1200; H = 960
 def poly(xy, deg, *coeffs):
     x, y = xy
     k = 0
-    s = 0 
+    s = 0
     for i in range(deg + 1):
         for j in range(deg + 1):
             s += coeffs[k] * np.power(x, i) * np.power(y, j)
@@ -35,6 +36,7 @@ def poly(xy, deg, *coeffs):
 ##########################################################
 def poly2(xy, *coeffs): return poly(xy, 2, *coeffs)
 def poly3(xy, *coeffs): return poly(xy, 3, *coeffs)
+def fun3(x, y, *coeffs): return poly((x, y), 3, *coeffs) # Sympy-friendly format
 POLYS = {2: poly2, 3: poly3}
 
 ##########################################################
@@ -65,7 +67,7 @@ def get_dir_minmax(losses, ind0, optm='max'):
     return refdir
 
 ##########################################################
-def get_dir(losses, ind, method='greedy'):
+def get_matrix_dir(losses, ind, method='greedy'):
     """Choose the 8-connected direction based on neighbourhood given that we are
     trying to minimize the losses"""
     if method == 'greedy':
@@ -74,7 +76,7 @@ def get_dir(losses, ind, method='greedy'):
         return - get_dir_minmax(losses, ind, 'max')
 
 ##########################################################
-def gradient_descent(losses, ind0, lr0):
+def gradient_descent_old(losses, ind0, lr0):
     errthresh = 1e-3 # Error threshold
     maxsteps = 1000
     curerr = 99999
@@ -96,7 +98,6 @@ def gradient_descent(losses, ind0, lr0):
 
         ind = ind + lr * get_dir(losses, ind, 'opposmax')
         ind = np.array([int(np.round(ind[0])), int(np.round(ind[1]))])
-        
 
         if ind[0] < 0: ind[0] = 0  # Clip values in the borders
         elif ind[0] > h: ind[0] = h - 1
@@ -113,6 +114,30 @@ def gradient_descent(losses, ind0, lr0):
         step += 1
 
     return ind, np.unravel_index(visitted, (h, w))
+
+##########################################################
+def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
+    errthresh = 1e-3 # Error threshold
+    maxsteps = 1000
+    curerr = 99999
+    visitted = [] # Store the descent path
+    x, y = sympy.symbols('x y')
+    p = p0
+
+    for step in range(maxsteps):
+        curerr = fsym.subs([(x, p[0]), (y, p[1])])
+        if (curerr < errthresh): break
+        lr *= .8
+        dfdx = dfdxsym.subs([(x, p[0]), (y, p[1])])
+        dfdy = dfdysym.subs([(x, p[0]), (y, p[1])])
+        grad = np.array([dfdx, dfdy]).astype(float)
+        print(p, curerr)
+        p += - lr * grad
+
+    breakpoint()
+    
+    return p
+    # return ind, np.unravel_index(visitted, (h, w))
 
 ##########################################################
 def plot_features_across_time(df, feats, outdir):
@@ -294,7 +319,7 @@ def plot_scatter3d(x_data, y_data, z_data, outpath):
     plt.savefig(outpath); plt.close('all')
 
 ##########################################################
-def fit_polynomials(deg, xs, ys, data, outdir):
+def fit_polynomials(deg, xs, ys, data):
     """Short description """
     info(inspect.stack()[0][3] + '()')
     xflat = xs.flatten()
@@ -373,11 +398,11 @@ def interpolate_one_axis(data, smpvals):
         a2 = (v2-v1) / (v3-v1) * (a3-a1) + a1
 
 ##########################################################
-def plot_losses_orig(data, xs, ys, tgts, outdir):
+def plot_losses(data, xs, ys, tgts, outdir):
     """Plot loss of the original points, restricted to the sampled grid"""
     info(inspect.stack()[0][3] + '()')
 
-    outdir = pjoin(outdir, 'orig')
+    # outdir = pjoin(outdir, 'orig')
     os.makedirs(outdir, exist_ok=True)
 
     for tt, tgt in enumerate(tgts):
@@ -398,7 +423,7 @@ def plot_losses_fitted(data, xs, ys, tgts, outdir):
     for tt, tgt in enumerate(tgts):
         outpath = pjoin(outdir, '{:.02f}_{:.02f}_{:.02f}.png'.format(*tgt))
 
-        fun, popts = fit_polynomials(3, xs, ys, data, outdir)
+        fun, popts = fit_polynomials(3, xs, ys, data)
         fitted = np.zeros(data.shape, dtype=float)
         for i in range(fitted.shape[0]):
             for j in range(fitted.shape[1]):
@@ -419,12 +444,38 @@ def generate_targets(franges, samplesz):
     return rnd
 
 ##########################################################
+def sample_fun(fun, xs, ys, popts):
+    info(inspect.stack()[0][3] + '()')
+    n, w, h = len(popts), xs.shape[0], xs.shape[1]
+    fitted = np.zeros((n, w, h), dtype=float)
+    for i in range(fitted.shape[0]):
+        for j in range(fitted.shape[1]):
+            for k in range(fitted.shape[2]):
+                fitted[i, j, k] = fun((xs[j, k], ys[j, k]), *(popts[i]))
+    return fitted
+
+##########################################################
+def get_gradient_poly3():
+    x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = sympy.symbols(
+            'x y a b c d e f g h i j k l m n o p')
+    u = fun3(x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
+    grad = [u.diff(x), u.diff(y)]
+    return grad
+
+##########################################################
+def lossfun(x, y, t1, t2, t3, *coeffs):
+    coeffs1 = coeffs[0 : 16]
+    coeffs2 = coeffs[16: 32]
+    coeffs3 = coeffs[32: 48]
+    loss = np.power(poly((x, y), 3, *coeffs1) - t1, 2) + \
+        np.power(poly((x, y), 3, *coeffs2) - t2, 2) + \
+        np.power(poly((x, y), 3, *coeffs3) - t3, 2)
+    return loss
+##########################################################
 def main(outdir):
-    """Short description"""
     info(inspect.stack()[0][3] + '()')
 
     feats = ['vcount', 'recipr', 'k']
-
     respath = './data/results.csv'
     df = pd.read_csv(respath)
 
@@ -435,10 +486,55 @@ def main(outdir):
     tgts = generate_targets(franges, samplesz=5)
     data, smpvals = get_average_values(df, feats, 100)
     xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
-    # plot_losses_orig(data, xs, ys, tgts, outdir)
-    # plot_losses_fitted(data, xs, ys, tgts, outdir)
-    return
 
+    # plot_losses(data, xs, ys, tgts, pjoin(outdir, 'orig'))
+
+    # Normalize data and tgt
+    for i in range(3):
+        d = data[i, :, :]
+        vmin, vmax = np.min(d), np.max(d)
+        data[i, :, :] = (d - vmin) / (vmax - vmin)
+        tgts[i] = (tgts[i] - vmin) / (vmax - vmin)
+
+    poly, popts = fit_polynomials(3, xs, ys, data)
+    fitted = sample_fun(poly, xs, ys, popts) # sampled points is arbitrary in the range
+    # plot_losses(fitted, xs, ys, tgts, pjoin(outdir, 'fitted'))
+    # dir = get_dir_minmax(fitted[0, :, :], [5, 5], optm='max')
+
+    x, y, t1, t2, t3 = sympy.symbols('x y t1 t2 t3')
+    a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1 = sympy.symbols(
+        'a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1')
+    a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2 = sympy.symbols(
+        'a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 m2 n2 o2 p2')
+    a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3 = sympy.symbols(
+        'a3 b3 c3 d3 e3 f3 g3 h3 i3 j3 k3 l3 m3 n3 o3 p3')
+
+    f = lossfun(x, y, t1, t2, t3,
+                a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1,
+                a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2,
+                a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3)
+
+    dfdx, dfdy = f.diff(x), f.diff(y)
+    vars1 = [a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1]
+    vars2 = [a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2]
+    vars3 = [a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3]
+    vars = vars1 + vars2 + vars3
+    repl = [(v, p) for v, p in zip(vars, np.array(popts).flatten())]
+
+    f2    =    f.subs(repl)
+    dfdx2 = dfdx.subs(repl)
+    dfdy2 = dfdy.subs(repl)
+
+    lr0 = 10
+    p0 = np.array([500, 20]).astype(float)
+    p0 = (p0 - vmin) / (vmax - vmin)
+    for tgt in tgts:
+        loss = get_loss(fitted, tgt)
+        f3    =    f2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
+        dfdx3 = dfdx2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
+        dfdy3 = dfdy2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
+        pmin, visitted = gradient_descent(f3, dfdx3, dfdy3, p0, lr0)
+    print(pmin)
 
 ##########################################################
 if __name__ == "__main__":
