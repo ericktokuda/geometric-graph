@@ -117,27 +117,28 @@ def gradient_descent_old(losses, ind0, lr0):
 
 ##########################################################
 def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
+    info(inspect.stack()[0][3] + '()')
     errthresh = 1e-3 # Error threshold
     maxsteps = 1000
     curerr = 99999
     visitted = [] # Store the descent path
     x, y = sympy.symbols('x y')
     p = p0
+    pace = [1, 1]
 
     for step in range(maxsteps):
         curerr = fsym.subs([(x, p[0]), (y, p[1])])
-        if (curerr < errthresh): break
-        lr *= .8
+        if (curerr < errthresh) or (np.linalg.norm(pace) < errthresh): break
+        lr *= .9
         dfdx = dfdxsym.subs([(x, p[0]), (y, p[1])])
         dfdy = dfdysym.subs([(x, p[0]), (y, p[1])])
         grad = np.array([dfdx, dfdy]).astype(float)
-        print(p, curerr)
-        p += - lr * grad
+        grad = grad / np.linalg.norm(grad)
+        print(p, dfdx, dfdy, curerr)
+        pace = - lr * grad
+        p = p + pace
 
-    breakpoint()
-    
     return p
-    # return ind, np.unravel_index(visitted, (h, w))
 
 ##########################################################
 def plot_features_across_time(df, feats, outdir):
@@ -280,14 +281,13 @@ def estimate_min(tgt, data, smpvals, outdir):
     breakpoint()
     
     ind0 = (7, 1)
-    lr0 = 10 
+    lr0 = 100 
     predind, pathinds = gradient_descent(losses, ind0, lr0)
     # print(len(pathinds))
     steppred = smpvals['step'][predind[0]]
     alphapred = smpvals['alpha'][predind[1]]
     print('PRED: step, alpha, ind, loss:', steppred, alphapred, predind,
             losses[predind[0], predind[1]])
-    # breakpoint()
     
     return predind
 
