@@ -18,7 +18,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from scipy.optimize import curve_fit, leastsq
 from sklearn.metrics import r2_score
-import sympy
+from sympy import symbols
 
 ##########################################################
 W = 1200; H = 960
@@ -90,57 +90,18 @@ def get_matrix_min_inds(losses):
     return mininds
 
 ##########################################################
-def gradient_descent_old(losses, ind0, lr0):
-    errthresh = 1e-3 # Error threshold
-    maxsteps = 1000
-    curerr = 99999
-    lr = lr0
-    losstgt = 0 # Target loss
-
-    h, w = losses.shape
-
-    visitted = [] # Store the descent path
-    step = 0
-    ind = ind0
-    while (step < maxsteps) and (curerr > errthresh):
-        lr *= .8
-        indflat = np.ravel_multi_index(ind, (h, w))
-        # if indflat in visitted: break # It is loop, unless the learning rate is different
-        visitted.append(indflat)
-
-        # ind = np.unravel_index(indflat, (h, w))
-
-        ind = ind + lr * get_dir(losses, ind, 'opposmax')
-        ind = np.array([int(np.round(ind[0])), int(np.round(ind[1]))])
-
-        if ind[0] < 0: ind[0] = 0  # Clip values in the borders
-        elif ind[0] > h: ind[0] = h - 1
-        if ind[1] < 0: ind[1] = 0
-        elif ind[1] >= w: ind[1] = w - 1
-
-        curloss = losses[ind[0], ind[1]]
-        curerr = np.abs(losstgt - curloss)
-        print(curloss)
-
-        newindflat = np.ravel_multi_index(ind, (h, w))
-        if newindflat == indflat: break
-
-        step += 1
-
-    return ind, np.unravel_index(visitted, (h, w))
-
-##########################################################
 def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
     info(inspect.stack()[0][3] + '()')
     errthresh = 1e-3 # Error threshold
     maxsteps = 1000
     curerr = 99999
     visitted = [] # Store the descent path
-    x, y = sympy.symbols('x y')
+    x, y = symbols('x y')
     p = p0
     pace = [1, 1]
 
     for step in range(maxsteps):
+        visitted.append(p)
         curerr = fsym.subs([(x, p[0]), (y, p[1])])
         if (curerr < errthresh) or (np.linalg.norm(pace) < errthresh): break
         lr *= .95
@@ -152,7 +113,7 @@ def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
         pace = - lr * grad
         p = p + pace
 
-    return p
+    return visitted
 
 ##########################################################
 def plot_features_across_time(df, feats, outdir):
@@ -192,6 +153,8 @@ def print_features_latex(df, feats):
 
 ##########################################################
 def get_average_values(df, feats, spl):
+    """Get average values across realizations of the features @feats,
+    sampled every @spl steps."""
     data = []
     for feat in feats:
         xs = np.unique(df.step)[::spl]
@@ -203,15 +166,14 @@ def get_average_values(df, feats, spl):
             ys = df2.groupby(['step'])[feat].mean()[xs]
             d.append(ys)
         data.append(np.array(d).T)
-    smpvals = {'alpha' : np.unique(df.alpha),
-            'step': xs}
+    smpvals = {'step': xs, 'alpha' : np.unique(df.alpha)}
     return np.array(data), smpvals
 
 ##########################################################
 def get_loss(data, tgt):
-    """Loss is defined as the euclidean difference between the @tgt and each row in
-    @data. We normalize the @data column-wise and apply the same normalization to
-    @tgt."""
+    """Loss is defined as the euclidean difference between the @tgt and each row
+    in @data. We normalize the @data column-wise and apply the same normalization
+    to @tgt."""
     # info(inspect.stack()[0][3] + '()')
     loss = np.zeros((data.shape[1], data.shape[2]))
     for i in range(data.shape[0]):
@@ -229,83 +191,6 @@ def plot_loss_heatmap(loss, outpath):
     plt.imshow(normloss)
     plt.colorbar()
     plt.savefig(outpath); plt.close()
-
-##########################################################
-def get_min(losses, smpvals, outdir):
-    """Get the minimum from the @losses matrix"""
-    info(inspect.stack()[0][3] + '()')
-    h, w = losses.shape
-    minind = np.unravel_index(np.argmin(losses), losses.shape)
-    steps = smpvals['step']
-    alphas = smpvals['alpha']
-    stepgt = steps[minind[0]]
-    alphagt = alphas[minind[1]]
-    print('GT: step, alpha, ind, loss:', stepgt, alphagt, minind,
-            losses[minind[0], minind[1]])
-
-    deg = 2
-    def poly(xy, *coeffs):
-        x, y = xy
-        k = 0
-        s = 0 
-        for i in range(deg + 1):
-            for j in range(deg + 1):
-                s += coeffs[k] * np.power(x, i) * np.power(y, j)
-                k += 1
-        return s
-
-    i0, j0 = minind 
-    if i0 > 0 and i0 < h - 1 and j0 > 0 and j0 < w - 1:
-        dir_ = get_dir_minmax(losses, minind, optm='min')
-        # TODO: choose a fractional step size to walk in opposite direction of dir_
-        # ii, jj = np.meshgrid([i0-1, i0, i0+1], [j0-1, j0, j0+1])
-        # print(losses[ii, jj] - losses[i0, j0])
-        # print(dir_)
-        # print(losses[ii, jj])
-        # print(losses[ii, jj].astype(int))
-            
-        # xx = np.array([steps[i0 - 1], steps[i0], steps[i0 + 1]])
-        # yy = np.array([alphas[j0 - 1], alphas[j0], alphas[j0 + 1]])
-        # xs, ys = np.meshgrid(xx, yy)
-        # aux = np.array([-1, 0, +1])
-        # ii, jj = np.meshgrid(aux, aux)
-        # zflat = losses[ii, jj].flatten()
-        # p0 = [1] * np.power(deg + 1, 2)
-        # popt, pcov = curve_fit(poly, (xs.flatten(), ys.flatten()), zflat, p0)
-        # breakpoint()
-    
-
-    return minind
-
-##########################################################
-def estimate_min(tgt, data, smpvals, outdir):
-
-    xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
-    popts = []
-    m = data.shape[0]
-    for featidx in range(m):
-        zs = data[featidx, :, :]
-        f, popt, err = fit_polynomial(xs, ys, zs, 2)
-        popts.append(popt)
-
-    x0, y0 = 100, 22
-    costs2 = [ np.power(tgt[i] - f((x0, y0), *(popts[i])), 2) for i in range(m) ]
-    # cost2 = 0
-    # for i in range(m): cost2 += np.power(tgt[i] - f((x0, y0), *(popts[i])), 2)
-    cost = np.sqrt(np.sum(costs2))
-    print(cost)
-    # breakpoint()
-    
-    ind0 = (7, 1)
-    lr0 = 100 
-    predind, pathinds = gradient_descent(losses, ind0, lr0)
-    # print(len(pathinds))
-    steppred = smpvals['step'][predind[0]]
-    alphapred = smpvals['alpha'][predind[1]]
-    print('PRED: step, alpha, ind, loss:', steppred, alphapred, predind,
-            losses[predind[0], predind[1]])
-    
-    return predind
 
 ##########################################################
 def plot_wireframe3d(xs, ys, zs, outpath):
@@ -326,7 +211,7 @@ def plot_scatter3d(x_data, y_data, z_data, outpath):
 
 ##########################################################
 def fit_polynomials(deg, xs, ys, data):
-    """Short description """
+    """Fit a polynomial of @deg degree in @data"""
     info(inspect.stack()[0][3] + '()')
     xflat = xs.flatten()
     yflat = ys.flatten()
@@ -404,20 +289,21 @@ def interpolate_one_axis(data, smpvals):
         a2 = (v2-v1) / (v3-v1) * (a3-a1) + a1
 
 ##########################################################
-def get_losses(data, xs, ys, tgts):
+def get_losses(data, tgts):
     """Plot loss of the original points, restricted to the sampled grid"""
     losses = {}
     for tt, tgt in enumerate(tgts):
-        losses[tuple(tgt)] = get_loss(data, tgt)
+        k = '{:.02f}_{:.02f}_{:.02f}'.format(*tgt)
+        losses[k] = get_loss(data, tgt)
     return losses
 
 ##########################################################
 def plot_losses(losses, xs, ys, outdir):
     os.makedirs(outdir, exist_ok=True)
-    # losses = get_losses(data, xs, ys, tgts, outdir)
+    # losses = get_losses(data, tgts)
     for tgt, v in losses.items():
         # plot_loss_heatmap(loss, pjoin(outdir, 'loss.png'))
-        outpath = pjoin(outdir, '{:.02f}_{:.02f}_{:.02f}.png'.format(*tgt))
+        outpath = pjoin(outdir, '{}.png'.format(tgt))
         plot_wireframe3d(xs, ys, v, outpath)
 
 ##########################################################
@@ -431,8 +317,8 @@ def generate_targets(franges, samplesz):
     return rnd
 
 ##########################################################
-def sample_fun(fun, xs, ys, popts):
-    info(inspect.stack()[0][3] + '()')
+def eval_fun(fun, popts, xs, ys):
+    """Evaluate function @fun, with parameters @popts at (@xs,@ys)"""
     n, w, h = len(popts), xs.shape[0], xs.shape[1]
     fitted = np.zeros((n, w, h), dtype=float)
     for i in range(fitted.shape[0]):
@@ -443,7 +329,7 @@ def sample_fun(fun, xs, ys, popts):
 
 ##########################################################
 def get_gradient_poly3():
-    x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = sympy.symbols(
+    x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p = symbols(
             'x y a b c d e f g h i j k l m n o p')
     u = fun3(x, y, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
     grad = [u.diff(x), u.diff(y)]
@@ -458,6 +344,7 @@ def lossfun(x, y, t1, t2, t3, *coeffs):
         np.power(poly((x, y), 3, *coeffs2) - t2, 2) + \
         np.power(poly((x, y), 3, *coeffs3) - t3, 2)
     return loss
+
 ##########################################################
 def main(outdir):
     info(inspect.stack()[0][3] + '()')
@@ -468,16 +355,19 @@ def main(outdir):
     respath = './data/results.csv'
     df = pd.read_csv(respath)
 
-    franges = get_ranges(df, feats)
+    franges = get_ranges(df, feats) # Feature value ranges
     # plot_features_across_time(df, feats, outdir)
     # print_features_latex(df, feats)
 
     tgts = generate_targets(franges, samplesz=5)
+    
     data, smpvals = get_average_values(df, feats, 100)
-    xs, ys = np.meshgrid(smpvals['alpha'], smpvals['step'])
 
-    losses = get_losses(data, xs, ys, tgts)
-    plot_losses(losses, xs, ys, pjoin(outdir, 'orig'))
+    # # Alpha and Time grid with shapes: (nsteps, nalphas)
+    agrid, tgrid = np.meshgrid(smpvals['alpha'], smpvals['step'])
+    
+    lossesorig = get_losses(data, tgts)
+    plot_losses(lossesorig, agrid, tgrid, pjoin(outdir, 'orig'))
 
     # # Normalize data and tgt
     for i in range(3):
@@ -485,21 +375,30 @@ def main(outdir):
         data[i, :, :] = (data[i, :, :] - vmin) / (vmax - vmin)
         tgts[:, i] = (tgts[:, i] - vmin) / (vmax - vmin)
 
-    poly, popts = fit_polynomials(3, xs, ys, data)
-    xx, yy = xs, ys # sampled points does not need to be the same as xs, ys
-    fitted = sample_fun(poly, xx, yy, popts)
-    losses = get_losses(fitted, xs, ys, tgts)
-    plot_losses(losses, xs, ys, pjoin(outdir, 'fitted'))
-
-    breakpoint()
+    mininds = {}
+    minvals = {}
+    for k in lossesorig:
+        loss = lossesorig[k]
+        z = np.unravel_index(np.argmin(loss), loss.shape)
+        mininds[k] = [smpvals['step'][z[0]],smpvals['alpha'][z[1]]]
+        minvals[k] = np.min(loss)
     
+    print(mininds.values())
+    print(minvals.values())
 
-    x, y, t1, t2, t3 = sympy.symbols('x y t1 t2 t3')
-    a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1 = sympy.symbols(
+    poly, popts = fit_polynomials(3, agrid, tgrid, data)
+
+    xx, yy = agrid, tgrid # Could be any other sampling
+    fitted = eval_fun(poly, popts, xx, yy)
+    lossesfitted = get_losses(fitted, tgts) # Just used to plot
+    plot_losses(lossesfitted, agrid, tgrid, pjoin(outdir, 'fitted'))
+
+    x, y, t1, t2, t3 = symbols('x y t1 t2 t3')
+    a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1 = symbols(
         'a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1')
-    a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2 = sympy.symbols(
+    a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2 = symbols(
         'a2 b2 c2 d2 e2 f2 g2 h2 i2 j2 k2 l2 m2 n2 o2 p2')
-    a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3 = sympy.symbols(
+    a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3 = symbols(
         'a3 b3 c3 d3 e3 f3 g3 h3 i3 j3 k3 l3 m3 n3 o3 p3')
 
     f = lossfun(x, y, t1, t2, t3,
@@ -514,20 +413,19 @@ def main(outdir):
     vars = vars1 + vars2 + vars3
     repl = [(v, p) for v, p in zip(vars, np.array(popts).flatten())]
 
-    f2    =    f.subs(repl)
-    dfdx2 = dfdx.subs(repl)
-    dfdy2 = dfdy.subs(repl)
+    f2, dfdx2, dfdy2  = f.subs(repl), dfdx.subs(repl), dfdy.subs(repl)
 
     lr0 = 20
-    p0 = np.array([300, 20]).astype(float)
+    p0 = np.array([20, 300]).astype(float)
     p0 = (p0 - vmin) / (vmax - vmin)
     for tgt in tgts:
-        loss = get_loss(fitted, tgt)
         f3    =    f2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         dfdx3 = dfdx2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         dfdy3 = dfdy2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
-        pmin, visitted = gradient_descent(f3, dfdx3, dfdy3, p0, lr0)
-    print(pmin)
+        visinds = gradient_descent(f3, dfdx3, dfdy3, p0, lr0)
+        print(visinds[-1])
+        
+    # print(pmin)
 
 ##########################################################
 if __name__ == "__main__":
