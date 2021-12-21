@@ -108,6 +108,7 @@ def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
         dfdx = dfdxsym.subs([(x, p[0]), (y, p[1])])
         dfdy = dfdysym.subs([(x, p[0]), (y, p[1])])
         grad = np.array([dfdx, dfdy]).astype(float)
+        print(dfdx, dfdy)
         grad = grad / np.linalg.norm(grad)
         # print(p, np.linalg.norm(pace), curerr)
         pace = - lr * grad
@@ -165,7 +166,7 @@ def get_average_values(df, feats, spl):
             df2 = df.loc[df.alpha == a]
             ys = df2.groupby(['step'])[feat].mean()[xs]
             d.append(ys)
-        data.append(np.array(d).T)
+        data.append(np.array(d))
     smpvals = {'step': xs, 'alpha' : np.unique(df.alpha)}
     return np.array(data), smpvals
 
@@ -198,7 +199,20 @@ def plot_wireframe3d(xs, ys, zs, outpath):
     surf = ax.plot_wireframe(xs, ys, zs)
     ax.set_xlabel('alpha')
     ax.set_ylabel('step')
+    ax.invert_xaxis()
     plt.savefig(outpath); plt.close()
+
+##########################################################
+def plot_contours(xs, ys, zs, outpath=''):
+    fig, ax = plt.subplots()
+    cont = ax.contour(xs, ys, zs)
+    ax.set_xlabel('alpha')
+    ax.set_ylabel('step')
+    ax.clabel(cont)
+    if outpath:
+        plt.savefig(outpath); plt.close()
+    else:
+        return fig, ax
 
 ##########################################################
 def plot_scatter3d(x_data, y_data, z_data, outpath):
@@ -300,17 +314,20 @@ def get_losses(data, tgts):
 ##########################################################
 def plot_losses(losses, xs, ys, outdir):
     os.makedirs(outdir, exist_ok=True)
-    # losses = get_losses(data, tgts)
+    
     for tgt, v in losses.items():
         # plot_loss_heatmap(loss, pjoin(outdir, 'loss.png'))
         outpath = pjoin(outdir, '{}.png'.format(tgt))
         plot_wireframe3d(xs, ys, v, outpath)
+        outpath = pjoin(outdir, 'contour_{}.png'.format(tgt))
+        # plot_contours(xs, ys, v, outpath)
 
 ##########################################################
 def generate_targets(franges, samplesz):
     """Generate uniform random targets (3-uples)"""
     info(inspect.stack()[0][3] + '()')
     rnd = np.random.rand(samplesz, 3)
+    
     for i in range(franges.shape[0]):
         vmin, vmax = franges[i, :]
         rnd[:, i] = rnd[:, i] * (vmax - vmin) + vmin
@@ -349,7 +366,7 @@ def lossfun(x, y, t1, t2, t3, *coeffs):
 def main(outdir):
     info(inspect.stack()[0][3] + '()')
 
-    seed = 1
+    seed = 0
     random.seed(seed); np.random.seed(seed)
     feats = ['vcount', 'recipr', 'k']
     respath = './data/results.csv'
@@ -359,32 +376,35 @@ def main(outdir):
     # plot_features_across_time(df, feats, outdir)
     # print_features_latex(df, feats)
 
-    tgts = generate_targets(franges, samplesz=5)
+    tgtsorig = generate_targets(franges, samplesz=1)
     
     data, smpvals = get_average_values(df, feats, 100)
 
-    # # Alpha and Time grid with shapes: (nsteps, nalphas)
-    agrid, tgrid = np.meshgrid(smpvals['alpha'], smpvals['step'])
+    # # Alpha and Time grid with shapes: (nalphas, nsteps)
+    tgrid, agrid = np.meshgrid(smpvals['step'], smpvals['alpha'])
     
-    lossesorig = get_losses(data, tgts)
+    lossesorig = get_losses(data, tgtsorig)
     plot_losses(lossesorig, agrid, tgrid, pjoin(outdir, 'orig'))
 
     # # Normalize data and tgt
+    tgts = np.zeros(tgtsorig.shape)
     for i in range(3):
         vmin, vmax = np.min(data[i, :, :]), np.max(data[i, :, :])
         data[i, :, :] = (data[i, :, :] - vmin) / (vmax - vmin)
-        tgts[:, i] = (tgts[:, i] - vmin) / (vmax - vmin)
+        tgts[:, i] = (tgtsorig[:, i] - vmin) / (vmax - vmin)
 
+    
     mininds = {}
     minvals = {}
     for k in lossesorig:
         loss = lossesorig[k]
         z = np.unravel_index(np.argmin(loss), loss.shape)
-        mininds[k] = [smpvals['step'][z[0]],smpvals['alpha'][z[1]]]
+        mininds[k] = [smpvals['alpha'][z[0]], smpvals['step'][z[1]]]
         minvals[k] = np.min(loss)
     
-    print(mininds.values())
-    print(minvals.values())
+    print('Tgt:', tgtsorig[0])
+    print('Min params:', list(mininds.values()))
+    print('Min loss:', list(minvals.values()))
 
     poly, popts = fit_polynomials(3, agrid, tgrid, data)
 
@@ -392,7 +412,7 @@ def main(outdir):
     fitted = eval_fun(poly, popts, xx, yy)
     lossesfitted = get_losses(fitted, tgts) # Just used to plot
     plot_losses(lossesfitted, agrid, tgrid, pjoin(outdir, 'fitted'))
-
+    
     x, y, t1, t2, t3 = symbols('x y t1 t2 t3')
     a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1 = symbols(
         'a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1')
@@ -416,14 +436,22 @@ def main(outdir):
     f2, dfdx2, dfdy2  = f.subs(repl), dfdx.subs(repl), dfdy.subs(repl)
 
     lr0 = 20
-    p0 = np.array([20, 300]).astype(float)
-    p0 = (p0 - vmin) / (vmax - vmin)
+    p0 = np.array([20, 2000]).astype(float)
     for tgt in tgts:
         f3    =    f2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         dfdx3 = dfdx2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         dfdy3 = dfdy2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         visinds = gradient_descent(f3, dfdx3, dfdy3, p0, lr0)
-        print(visinds[-1])
+        for i, v in enumerate(visinds):
+            k = '{:.02f}_{:.02f}_{:.02f}'.format(*tgt)
+            fig, ax = plot_contours(agrid, tgrid, lossesfitted[k])
+            ax.scatter(v[0], v[1])
+            plt.savefig(pjoin('/tmp/{:02d}.png'.format(i)))
+            plt.close()
+
+        # breakpoint()
+        
+        # print(visinds[-1])
         
     # print(pmin)
 
