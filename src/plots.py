@@ -82,7 +82,7 @@ def get_matrix_min_inds(losses):
     info(inspect.stack()[0][3] + '()')
     n, w, h = losses.shape
     mininds = []
-    
+
     for i in range(n):
         loss = losses[i, :, :]
         minind = np.unravel_index(np.argmin(loss), loss.shape)
@@ -108,7 +108,6 @@ def gradient_descent(fsym, dfdxsym, dfdysym, p0, lr):
         dfdx = dfdxsym.subs([(x, p[0]), (y, p[1])])
         dfdy = dfdysym.subs([(x, p[0]), (y, p[1])])
         grad = np.array([dfdx, dfdy]).astype(float)
-        print(dfdx, dfdy)
         grad = grad / np.linalg.norm(grad)
         # print(p, np.linalg.norm(pace), curerr)
         pace = - lr * grad
@@ -227,6 +226,7 @@ def plot_scatter3d(x_data, y_data, z_data, outpath):
 def fit_polynomials(deg, xs, ys, data):
     """Fit a polynomial of @deg degree in @data"""
     info(inspect.stack()[0][3] + '()')
+
     xflat = xs.flatten()
     yflat = ys.flatten()
     p0 = [1] * np.power(deg + 1, 2)
@@ -377,14 +377,14 @@ def main(outdir):
     # print_features_latex(df, feats)
 
     tgtsorig = generate_targets(franges, samplesz=1)
-    
+
     data, smpvals = get_average_values(df, feats, 100)
 
     # # Alpha and Time grid with shapes: (nalphas, nsteps)
-    tgrid, agrid = np.meshgrid(smpvals['step'], smpvals['alpha'])
-    
+    tgridorig, agridorig = np.meshgrid(smpvals['step'], smpvals['alpha'])
+
     lossesorig = get_losses(data, tgtsorig)
-    plot_losses(lossesorig, agrid, tgrid, pjoin(outdir, 'orig'))
+    plot_losses(lossesorig, agridorig, tgridorig, pjoin(outdir, 'orig'))
 
     # # Normalize data and tgt
     tgts = np.zeros(tgtsorig.shape)
@@ -393,7 +393,7 @@ def main(outdir):
         data[i, :, :] = (data[i, :, :] - vmin) / (vmax - vmin)
         tgts[:, i] = (tgtsorig[:, i] - vmin) / (vmax - vmin)
 
-    
+
     mininds = {}
     minvals = {}
     for k in lossesorig:
@@ -401,10 +401,16 @@ def main(outdir):
         z = np.unravel_index(np.argmin(loss), loss.shape)
         mininds[k] = [smpvals['alpha'][z[0]], smpvals['step'][z[1]]]
         minvals[k] = np.min(loss)
-    
+
     print('Tgt:', tgtsorig[0])
     print('Min params:', list(mininds.values()))
     print('Min loss:', list(minvals.values()))
+
+    # Normalize axes
+    amin, amax = np.min(agridorig), np.max(agridorig)
+    tmin, amax = np.min(agridorig), np.max(agridorig)
+    agrid = (agridorig  - amin) / (amax - amin)
+    tgrid = (tgridorig  - tmin) / (tmax - tmin)
 
     poly, popts = fit_polynomials(3, agrid, tgrid, data)
 
@@ -421,6 +427,7 @@ def main(outdir):
     a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3 = symbols(
         'a3 b3 c3 d3 e3 f3 g3 h3 i3 j3 k3 l3 m3 n3 o3 p3')
 
+    
     f = lossfun(x, y, t1, t2, t3,
                 a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1,
                 a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2,
@@ -435,8 +442,9 @@ def main(outdir):
 
     f2, dfdx2, dfdy2  = f.subs(repl), dfdx.subs(repl), dfdy.subs(repl)
 
-    lr0 = 20
-    p0 = np.array([20, 2000]).astype(float)
+    lr0 = .5
+    # p0 = np.array([20, 2000]).astype(float)
+    p0 = np.array([.5, .5]).astype(float)
     for tgt in tgts:
         f3    =    f2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
         dfdx3 = dfdx2.subs([(t1, tgt[0]), (t2, tgt[1]), (t3, tgt[2])])
@@ -446,13 +454,11 @@ def main(outdir):
             k = '{:.02f}_{:.02f}_{:.02f}'.format(*tgt)
             fig, ax = plot_contours(agrid, tgrid, lossesfitted[k])
             ax.scatter(v[0], v[1])
-            plt.savefig(pjoin('/tmp/{:02d}.png'.format(i)))
+            plt.savefig(pjoin(pjoin(outdir, '{:02d}.png'.format(i))))
             plt.close()
 
-        # breakpoint()
-        
         # print(visinds[-1])
-        
+
     # print(pmin)
 
 ##########################################################
