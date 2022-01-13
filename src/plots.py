@@ -46,7 +46,7 @@ def get_dir_minmax(losses, ind0, optm='max'):
     magnitude"""
     ind0 = np.array(ind0)
     curloss = losses[ind0[0], ind0[1]]
-    
+
     # x0, y0 = ind
     dirs_ = np.array([
         [+ 1,   0 ], [  0, +1 ],
@@ -262,7 +262,7 @@ def fit_polynomial(xs, ys, zs, deg):
 
     avgerr = np.mean(np.abs(zflat - zspred.flatten()))
     # r2 = r2_score(zflat, zspred.flatten())
-    
+
     return fun, popt, avgerr
 
 ##########################################################
@@ -314,7 +314,7 @@ def get_losses(data, tgts):
 ##########################################################
 def plot_losses(losses, xs, ys, outdir):
     os.makedirs(outdir, exist_ok=True)
-    
+
     for tgt, v in losses.items():
         # plot_loss_heatmap(loss, pjoin(outdir, 'loss.png'))
         outpath = pjoin(outdir, '{}.png'.format(tgt))
@@ -408,17 +408,23 @@ def main(outdir):
 
     # Normalize axes
     amin, amax = np.min(agridorig), np.max(agridorig)
-    tmin, amax = np.min(agridorig), np.max(agridorig)
+    tmin, tmax = np.min(tgridorig), np.max(tgridorig)
     agrid = (agridorig  - amin) / (amax - amin)
     tgrid = (tgridorig  - tmin) / (tmax - tmin)
+    anorm, tnorm = agrid[:, 0], tgrid[0, :]
+    adelta, tdelta = anorm[1] - anorm[0], tnorm[1] - tnorm[0]
+    avals2 = np.arange(anorm[-1] + adelta, 1.5, adelta)
+    tvals2 = np.arange(tnorm[-1] + tdelta, 1.5, tdelta)
+    tgrid2 , agrid2 = np.meshgrid(avals2, tvals2)
 
+    
     poly, popts = fit_polynomials(3, agrid, tgrid, data)
 
-    xx, yy = agrid, tgrid # Could be any other sampling
+    xx, yy = agrid2, tgrid2 # Could be any other sampling
     fitted = eval_fun(poly, popts, xx, yy)
     lossesfitted = get_losses(fitted, tgts) # Just used to plot
-    plot_losses(lossesfitted, agrid, tgrid, pjoin(outdir, 'fitted'))
-    
+    plot_losses(lossesfitted, agrid2, tgrid2, pjoin(outdir, 'fitted'))
+
     x, y, t1, t2, t3 = symbols('x y t1 t2 t3')
     a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1 = symbols(
         'a1 b1 c1 d1 e1 f1 g1 h1 i1 j1 k1 l1 m1 n1 o1 p1')
@@ -427,7 +433,7 @@ def main(outdir):
     a3, b3, c3, d3, e3, f3, g3, h3, i3, j3, k3, l3, m3, n3, o3, p3 = symbols(
         'a3 b3 c3 d3 e3 f3 g3 h3 i3 j3 k3 l3 m3 n3 o3 p3')
 
-    
+
     f = lossfun(x, y, t1, t2, t3,
                 a1, b1, c1, d1, e1, f1, g1, h1, i1, j1, k1, l1, m1, n1, o1, p1,
                 a2, b2, c2, d2, e2, f2, g2, h2, i2, j2, k2, l2, m2, n2, o2, p2,
@@ -452,7 +458,7 @@ def main(outdir):
         visinds = gradient_descent(f3, dfdx3, dfdy3, p0, lr0)
         for i, v in enumerate(visinds):
             k = '{:.02f}_{:.02f}_{:.02f}'.format(*tgt)
-            fig, ax = plot_contours(agrid, tgrid, lossesfitted[k])
+            fig, ax = plot_contours(agrid2, tgrid2, lossesfitted[k])
             ax.scatter(v[0], v[1])
             plt.savefig(pjoin(pjoin(outdir, '{:02d}.png'.format(i))))
             plt.close()
